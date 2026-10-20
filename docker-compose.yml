@@ -1,0 +1,38 @@
+version: '3.8'
+
+services:
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: rabbitmq_broker
+    ports:
+      - "5672:5672"
+      - "15672:15672" # Painel web de gestão do RabbitMQ (porta acessível no browser para testes)
+    networks:
+      - rede-interna
+
+  api:
+    build: ./api
+    container_name: servico_a_api
+    ports:
+      - "8000:8000"
+    environment:
+      - RABBITMQ_HOST=rabbitmq
+      - GOOGLE_CLIENT_ID=seu-client-id-do-google.apps.googleusercontent.com
+    depends_on:
+      - rabbitmq
+    networks:
+      - rede-interna
+
+  worker:
+    build: ./worker
+    container_name: servico_b_worker
+    environment:
+      - RABBITMQ_HOST=rabbitmq
+    depends_on:
+      - rabbitmq
+    networks:
+      - rede-interna
+
+networks:
+  rede-interna:
+    driver: bridge
