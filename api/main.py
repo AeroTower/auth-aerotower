@@ -1,50 +1,121 @@
-from fastapi import FastAPI, HTTPException, status
-from pydantic import BaseModel
-import pika
-import json
 import os
+import requests
+from fastapi import FastAPI, HTTPException, status
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
+from google.oauth2 import id_token
+from google.auth.transport import requests as google_requests
 
-app = FastAPI()
+app = FastAPI(title="AeroTower API")
 
-# Modelo de dados para receber via JSON no corpo da requisição (Body)
-class TorreVinculo(BaseModel):
-    user_email: str
-    tower_id: str
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
-def publicar_na_fila(dados):
-    host = os.getenv("RABBITMQ_HOST", "localhost")
-    conexao = pika.BlockingConnection(pika.ConnectionParameters(host=host))
-    canal = conexao.channel()
-    
-    # Declara a fila durável
-    canal.queue_declare(queue='fila_vinculo_torre', durable=True)
-    
-    canal.basic_publish(
-        exchange='',
-        routing_key='fila_vinculo_torre',
-        body=json.dumps(dados),
-        properties=pika.BasicProperties(delivery_mode=2) # Torna a mensagem persistente
-    )
-    conexao.close()
-    print(f"[API] Mensagem publicada na fila com sucesso: {dados}")
+GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID")
+
+# ------------------------------------------------------------------------------
+# Banco de Dados Simulado (Substitua pelas suas consultas SQL/ORM)
+# Estrutura: { "email_usuario": "token_da_torre" }
+# ------------------------------------------------------------------------------
+db_torres = {}
+
+
+# ------------------------------------------------------------------------------
+# Schemas
+# ------------------------------------------------------------------------------
+class TokenSchema(BaseModel):
+    token: str
+
+class VincularTorreSchema(BaseModel):
+    email: str
+    token_torre: str
+
+
+# ------------------------------------------------------------------------------
+# Rotas
+# ------------------------------------------------------------------------------
+@app.post("/auth/google")
+def auth_google(data: TokenSchema):
+    token = data.token
+    user_email = None
+
+    # 1. Tenta validar como ID Token (JWT)
+    try:
+        id_info = id_token.verify_oauth2_token(
+            token, google_requests.Request(), GOOGLE_CLIENT_ID
+        )
+        user_email = id_info.get("email")
+    except Exception:
+        pass
+
+    # 2. Tenta validar como Access Token (Google UserInfo API)
+    if not user_email:
+        try:
+            userinfo_response = requests.get(
+                "https://www.googleapis.com/oauth2/v3/userinfo",
+                headers={"Authorization": f"Bearer {token}"},
+                timeout=10
+            )
+            if userinfo_response.status_code == 200:
+                user_email = userinfo_response.json().get("email")
+        except Exception:
+            pass
+
+    if not user_email:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token do Google inválido ou não autorizado"
+        )
+
+    # REGRA DE NEGÓCIO: Checa se este e-mail já tem uma torre associada
+    torre_vinculada = db_torres.get(user_email)
+    possui_torre = torre_vinculada is not None
+
+    return {
+        "status": "success",
+        "email": user_email,
+        "possui_torre": possui_torre,
+        "torre_id": torre_vinculada
+    }
+
 
 @app.post("/torre/vincular")
-def vincular_torre(vinculo: TorreVinculo):
-    # Converte os dados do corpo para dicionário
-    evento = {
-        "user_email": vinculo.user_email,
-        "tower_id": vinculo.tower_id
-    }
-    
-    try:
-        publicar_na_fila(evento)
-    except Exception as e:
+def vincular_torre(data: VincularTorreSchema):
+    email = data.email.strip()
+    token_torre = data.token_torre.strip()
+
+    if not email or not token_torre:
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Erro ao publicar no RabbitMQ: {str(e)}"
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="E-mail e token da torre são obrigatórios."
         )
-    
+
+    # REGRA DE NEGÓCIO 1: Usuário já possui uma torre?
+    if email in db_torres:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"O usuário '{email}' já possui a torre '{db_torres[email]}' vinculada."
+        )
+
+    # REGRA DE NEGÓCIO 2: A torre já está vinculada a outro usuário?
+    if token_torre in db_torres.values():
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Esta AeroTower já está associada a outro usuário."
+        )
+
+    # Registra o vínculo único
+    db_torres[email] = token_torre
+    print(f"=== [BANCO] Novo vínculo criado: {email} <-> {token_torre} ===", flush=True)
+
     return {
-        "status": "processando", 
-        "mensagem": f"Solicitação de vínculo da torre {vinculo.tower_id} para {vinculo.user_email} enviada com sucesso!"
+        "status": "success",
+        "message": "AeroTower vinculada com sucesso!",
+        "email": email,
+        "torre_id": token_torre
     }

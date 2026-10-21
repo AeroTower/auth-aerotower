@@ -13,9 +13,12 @@ services:
     container_name: servico_a_api
     ports:
       - "8000:8000"
+    command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+    volumes:
+      - ./api:/app
     environment:
       - RABBITMQ_HOST=rabbitmq
-      - GOOGLE_CLIENT_ID=seu-client-id-do-google.apps.googleusercontent.com
+      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
     depends_on:
       - rabbitmq
     networks:
