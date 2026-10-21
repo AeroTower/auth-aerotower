@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   rabbitmq:
     image: rabbitmq:3-management
@@ -26,8 +24,10 @@ services:
   worker:
     build: ./worker
     container_name: servico_b_worker
+    command: python consumer.py
     environment:
       - RABBITMQ_HOST=rabbitmq
+      - PYTHONUNBUFFERED=1
     depends_on:
       - rabbitmq
     networks:
