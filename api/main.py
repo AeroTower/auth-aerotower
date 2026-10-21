@@ -1,5 +1,7 @@
 import os
+import json
 import requests
+import pika
 from fastapi import FastAPI, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -17,17 +19,11 @@ app.add_middleware(
 )
 
 GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID")
+RABBITMQ_HOST = os.getenv("RABBITMQ_HOST", "rabbitmq")
 
-# ------------------------------------------------------------------------------
-# Banco de Dados Simulado (Substitua pelas suas consultas SQL/ORM)
-# Estrutura: { "email_usuario": "token_da_torre" }
-# ------------------------------------------------------------------------------
+# Dicionário de estado (Substitua por consulta SQL/PostgreSQL no futuro)
 db_torres = {}
 
-
-# ------------------------------------------------------------------------------
-# Schemas
-# ------------------------------------------------------------------------------
 class TokenSchema(BaseModel):
     token: str
 
@@ -35,87 +31,85 @@ class VincularTorreSchema(BaseModel):
     email: str
     token_torre: str
 
+def publicar_no_rabbitmq(payload: dict):
+    try:
+        connection = pika.BlockingConnection(pika.ConnectionParameters(host=RABBITMQ_HOST))
+        channel = connection.channel()
+        channel.queue_declare(queue='vincular_torre', durable=True)
+        channel.basic_publish(
+            exchange='',
+            routing_key='vincular_torre',
+            body=json.dumps(payload),
+            properties=pika.BasicProperties(delivery_mode=2)
+        )
+        connection.close()
+    except Exception as e:
+        print(f"=== [ERRO RABBITMQ] {e} ===", flush=True)
 
-# ------------------------------------------------------------------------------
-# Rotas
-# ------------------------------------------------------------------------------
 @app.post("/auth/google")
 def auth_google(data: TokenSchema):
     token = data.token
     user_email = None
 
-    # 1. Tenta validar como ID Token (JWT)
     try:
-        id_info = id_token.verify_oauth2_token(
-            token, google_requests.Request(), GOOGLE_CLIENT_ID
-        )
+        id_info = id_token.verify_oauth2_token(token, google_requests.Request(), GOOGLE_CLIENT_ID)
         user_email = id_info.get("email")
     except Exception:
         pass
 
-    # 2. Tenta validar como Access Token (Google UserInfo API)
     if not user_email:
         try:
-            userinfo_response = requests.get(
-                "https://www.googleapis.com/oauth2/v3/userinfo",
-                headers={"Authorization": f"Bearer {token}"},
-                timeout=10
-            )
-            if userinfo_response.status_code == 200:
-                user_email = userinfo_response.json().get("email")
+            resp = requests.get("https://www.googleapis.com/oauth2/v3/userinfo", headers={"Authorization": f"Bearer {token}"}, timeout=10)
+            if resp.status_code == 200:
+                user_email = resp.json().get("email")
         except Exception:
             pass
 
     if not user_email:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Token do Google inválido ou não autorizado"
-        )
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token do Google inválido")
 
-    # REGRA DE NEGÓCIO: Checa se este e-mail já tem uma torre associada
-    torre_vinculada = db_torres.get(user_email)
-    possui_torre = torre_vinculada is not None
+    # Verifica se o e-mail já possui torre vinculada
+    possui_torre = user_email in db_torres
 
     return {
         "status": "success",
         "email": user_email,
         "possui_torre": possui_torre,
-        "torre_id": torre_vinculada
+        "torre_id": db_torres.get(user_email)
     }
-
 
 @app.post("/torre/vincular")
 def vincular_torre(data: VincularTorreSchema):
     email = data.email.strip()
     token_torre = data.token_torre.strip()
 
-    if not email or not token_torre:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="E-mail e token da torre são obrigatórios."
-        )
-
-    # REGRA DE NEGÓCIO 1: Usuário já possui uma torre?
+    # REGRA DE NEGÓCIO 1: Usuário já tem torre?
     if email in db_torres:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"O usuário '{email}' já possui a torre '{db_torres[email]}' vinculada."
+            detail=f"O e-mail '{email}' já possui a torre '{db_torres[email]}' vinculada."
         )
 
-    # REGRA DE NEGÓCIO 2: A torre já está vinculada a outro usuário?
+    # REGRA DE NEGÓCIO 2: Torre já pertence a outro usuário?
     if token_torre in db_torres.values():
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="Esta AeroTower já está associada a outro usuário."
+            detail=f"A AeroTower '{token_torre}' já está associada a outro usuário."
         )
 
-    # Registra o vínculo único
+    # Salva o vínculo
     db_torres[email] = token_torre
-    print(f"=== [BANCO] Novo vínculo criado: {email} <-> {token_torre} ===", flush=True)
+
+    # Publica evento para o Worker iniciar rotinas de telemetria/MQTT
+    publicar_no_rabbitmq({
+        "evento": "TORRE_VINCULADA",
+        "email": email,
+        "token_torre": token_torre
+    })
 
     return {
         "status": "success",
-        "message": "AeroTower vinculada com sucesso!",
+        "message": "Torre vinculada com sucesso!",
         "email": email,
         "torre_id": token_torre
     }

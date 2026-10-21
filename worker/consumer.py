@@ -1,69 +1,78 @@
-import pika
+import os
 import json
 import time
-import os
+import pika
 
-# "Base de dados" em memória para controlar os vínculos ativos
-# Formato: { "tower_id": "user_email" } -> Guarda qual utilizador é dono de qual torre
-torres_ocupadas = {}
-# Formato: { "user_email": "tower_id" } -> Guarda qual torre pertence a cada utilizador
-utilizadores_com_torre = {}
+RABBITMQ_HOST = os.getenv("RABBITMQ_HOST", "rabbitmq")
 
-def processar_vinculo(ch, method, properties, body):
-    dados = json.loads(body)
-    user_email = dados.get('user_email')
-    tower_id = dados.get('tower_id')
-    
-    print(f"\n[Worker] A processar evento: Vinculando a Torre [{tower_id}] ao utilizador [{user_email}]...")
-    
-    # Validação 1: O mesmo e-mail já está a tentar vincular-se à mesma torre
-    if torres_ocupadas.get(tower_id) == user_email:
-        print(f"[Worker AVISO] O utilizador [{user_email}] já possui a Torre [{tower_id}] vinculada. Ignorando duplicado.")
+# Simulação do banco de dados relacional no Worker
+# Formato: { "email_usuario": "token_da_torre" }
+db_torres = {}
+
+def processar_mensagem(ch, method, properties, body):
+    try:
+        dados = json.loads(body)
+        email = dados.get("email")
+        token_torre = dados.get("token_torre")
+
+        print(f"\n=== [WORKER] Nova mensagem recebida da fila 'vincular_torre' ===", flush=True)
+        print(f"=== [WORKER] Processando: Usuário '{email}' -> Torre '{token_torre}' ===", flush=True)
+
+        # ----------------------------------------------------------------------
+        # REGRA DE NEGÓCIO 1: O utilizador já possui uma torre vinculada?
+        # ----------------------------------------------------------------------
+        if email in db_torres:
+            torre_atual = db_torres[email]
+            print(f"=== [REJEITADO] O e-mail '{email}' já possui a torre '{torre_atual}' cadastrada. ===", flush=True)
+            ch.basic_ack(delivery_tag=method.delivery_tag)
+            return
+
+        # ----------------------------------------------------------------------
+        # REGRA DE NEGÓCIO 2: A torre já está atribuída a outro utilizador?
+        # ----------------------------------------------------------------------
+        if token_torre in db_torres.values():
+            print(f"=== [REJEITADO] A AeroTower '{token_torre}' já pertence a outro utilizador. ===", flush=True)
+            ch.basic_ack(delivery_tag=method.delivery_tag)
+            return
+
+        # ----------------------------------------------------------------------
+        # PERSISTÊNCIA E EXECUÇÃO
+        # ----------------------------------------------------------------------
+        db_torres[email] = token_torre
+        print(f"=== [SUCESSO] Vínculo ativado com êxito! {email} <-> {token_torre} ===", flush=True)
+        print(f"=== [BANCO ATUAL] {db_torres} ===", flush=True)
+
+        # Confirma ao RabbitMQ que a mensagem foi processada com sucesso
         ch.basic_ack(delivery_tag=method.delivery_tag)
-        return
 
-    # Validação 2: Outro e-mail está a tentar vincular-se a uma torre que já pertence a outra pessoa
-    if tower_id in torres_ocupadas:
-        dono_atual = torres_ocupadas[tower_id]
-        print(f"[Worker ERRO] A Torre [{tower_id}] já pertence ao utilizador [{dono_atual}]. Vínculo rejeitado para [{user_email}].")
-        ch.basic_ack(delivery_tag=method.delivery_tag) # Faz o ACK para retirar da fila (mensagem inválida por regra de negócio)
-        return
-
-    # Validação 3: O mesmo e-mail já tem outra torre vinculada (se a regra for 1 torre por utilizador)
-    if user_email in utilizadores_com_torre:
-        outra_torre = utilizadores_com_torre[user_email]
-        print(f"[Worker ERRO] O utilizador [{user_email}] já possui a Torre [{outra_torre}] vinculada. Não pode ter torres diferentes.")
+    except Exception as e:
+        print(f"=== [ERRO CRÍTICO WORKER] Falha ao processar mensagem: {e} ===", flush=True)
+        # Em caso de erro inesperado de sintaxe/dados, remove a mensagem para não travar a fila
         ch.basic_ack(delivery_tag=method.delivery_tag)
-        return
 
-    # Se passou por todas as validações, efetiva o vínculo!
-    torres_ocupadas[tower_id] = user_email
-    utilizadores_com_torre[user_email] = tower_id
-    
-    time.sleep(1)
-    print(f"[Worker Sucesso] A Torre [{tower_id}] foi vinculada com sucesso ao utilizador [{user_email}].")
-    
-    ch.basic_ack(delivery_tag=method.delivery_tag)
-
-def iniciar_consumidor():
-    host = os.getenv("RABBITMQ_HOST", "rabbitmq")
-    
+def iniciar_worker():
+    """Tenta conectar ao RabbitMQ com suporte a retry caso o broker esteja inicializando."""
     while True:
         try:
-            print(f"[Worker] A ligar ao RabbitMQ em '{host}'...")
-            conexao = pika.BlockingConnection(pika.ConnectionParameters(host=host))
-            canal = conexao.channel()
-            
-            canal.queue_declare(queue='fila_vinculo_torre', durable=True)
-            canal.basic_qos(prefetch_count=1)
-            canal.basic_consume(queue='fila_vinculo_torre', on_message_callback=processar_vinculo)
-            
-            print("[Worker] Ligado com sucesso! À escuta de mensagens na fila...")
-            canal.start_consuming()
-            break
-        except Exception as e:
-            print(f"[Worker Erro] Falha na conexão: {e}. A tentar novamente em 3 segundos...")
-            time.sleep(3)
+            print("=== [WORKER] Conectando ao RabbitMQ... ===", flush=True)
+            connection = pika.BlockingConnection(
+                pika.ConnectionParameters(host=RABBITMQ_HOST)
+            )
+            channel = connection.channel()
 
-if __name__ == "__main__":
-    iniciar_consumidor()
+            # Garante que a fila existe
+            channel.queue_declare(queue='vincular_torre', durable=True)
+
+            # Distribui 1 mensagem por vez para o worker
+            channel.basic_qos(prefetch_count=1)
+            channel.basic_consume(queue='vincular_torre', on_message_callback=processar_mensagem)
+
+            print("=== [WORKER] Conectado e aguardando eventos na fila 'vincular_torre'... ===", flush=True)
+            channel.start_consuming()
+
+        except pika.exceptions.AMQPConnectionError:
+            print("=== [WORKER] RabbitMQ ainda indisponível. Aguardando 5 segundos... ===", flush=True)
+            time.sleep(5)
+
+if __name__ == '__main__':
+    iniciar_worker()
