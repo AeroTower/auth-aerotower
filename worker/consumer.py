@@ -17,7 +17,9 @@ quando chegar `torre.cadastrada` (plano Starter, API de credenciais).
 import json
 import logging
 import os
+import threading
 import time
+from http.server import BaseHTTPRequestHandler, HTTPServer
 
 import pika
 import requests
@@ -32,6 +34,32 @@ FILA_FALHAS  = "backend.torres.falhas"
 BACKEND_URL  = os.getenv("BACKEND_URL", "http://localhost:8001").rstrip("/")
 SERVICO_KEY  = os.getenv("SERVICO_API_KEY", "")
 ESPERA_S     = float(os.getenv("WORKER_ESPERA_S", "5"))
+
+
+# Estado para a pagina de saude (App Service exige uma porta HTTP respondendo).
+_saude = {"conectado": False, "processados": 0, "ultimo_erro": None}
+
+
+class _Saude(BaseHTTPRequestHandler):
+    def do_GET(self):
+        corpo = json.dumps({"servico": "auth-aerotower-worker", **_saude}).encode()
+        self.send_response(200 if _saude["conectado"] else 503)
+        self.send_header("Content-Type", "application/json")
+        self.end_headers()
+        self.wfile.write(corpo)
+
+    def log_message(self, *args):   # sem log a cada ping
+        pass
+
+
+def iniciar_saude():
+    """So sobe se houver PORT (App Service / Container Apps). Local, nao precisa."""
+    porta = os.getenv("PORT") or os.getenv("WEBSITES_PORT")
+    if not porta:
+        return
+    servidor = HTTPServer(("0.0.0.0", int(porta)), _Saude)
+    threading.Thread(target=servidor.serve_forever, daemon=True).start()
+    log.info("Página de saúde em :%s", porta)
 
 
 class ErroTemporario(Exception):
@@ -68,8 +96,10 @@ def processar(canal, metodo, propriedades, corpo):
         log.info("Recebido %s: %s", metodo.routing_key, evento.get("torre"))
         aplicar_no_backend(evento)
         canal.basic_ack(delivery_tag=metodo.delivery_tag)
+        _saude["processados"] += 1
         log.info("Backend atualizado (%s)", evento["torre"]["id"])
     except ErroTemporario as erro:
+        _saude["ultimo_erro"] = str(erro)[:200]
         log.warning("Backend indisponível (%s). Nova tentativa em %ss.", erro, ESPERA_S)
         time.sleep(ESPERA_S)
         canal.basic_nack(delivery_tag=metodo.delivery_tag, requeue=True)
@@ -90,6 +120,7 @@ def preparar(canal) -> None:
 
 
 def iniciar_worker():
+    iniciar_saude()
     if not SERVICO_KEY:
         log.warning("SERVICO_API_KEY vazia: o Backend vai recusar as atualizações.")
     while True:
@@ -99,9 +130,11 @@ def iniciar_worker():
             canal = conexao.channel()
             preparar(canal)
             canal.basic_consume(queue=FILA, on_message_callback=processar)
+            _saude["conectado"] = True
             log.info("Aguardando eventos em '%s' -> %s", FILA, BACKEND_URL)
             canal.start_consuming()
         except pika.exceptions.AMQPConnectionError:
+            _saude["conectado"] = False
             log.warning("RabbitMQ indisponível. Nova tentativa em 5 s.")
             time.sleep(5)
 

@@ -1,0 +1,58 @@
+# Testa e publica os dois servicos no Azure App Service.
+#
+# Uma vez so, no portal da Azure (no MESMO plano B1 do Backend: sem custo extra):
+#   1. crie 2 Web Apps Linux, Python 3.11: aerotower-auth e aerotower-auth-worker
+#   2. em cada uma: Configuracao > Configuracoes gerais
+#        aerotower-auth          Comando de inicializacao: uvicorn main:app --host 0.0.0.0 --port 8000
+#        aerotower-auth-worker   Comando de inicializacao: python consumer.py
+#      e ligue "Sempre ativo" (Always On) no worker, senao ele dorme e para de consumir
+#   3. em cada uma: Configuracao > Configuracoes de aplicativo -> variaveis do .env.example
+#      e SCM_DO_BUILD_DURING_DEPLOYMENT=true
+#   4. baixe o "perfil de publicacao" de cada app e salve como secret deste repo:
+#        AZURE_AUTH_API_PUBLISH_PROFILE e AZURE_AUTH_WORKER_PUBLISH_PROFILE
+#      (o perfil exige "Credenciais de publicacao basica SCM" ligadas no app)
+name: Testes e deploy na Azure
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  testes:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Testes da API
+        working-directory: api
+        run: |
+          pip install -r requirements.txt pytest httpx
+          pytest -q tests
+      - name: Testes do worker
+        working-directory: worker
+        run: |
+          pip install -r requirements.txt pytest
+          pytest -q tests
+
+  deploy:
+    needs: testes
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Publica a API (Servico A)
+        uses: azure/webapps-deploy@v3
+        with:
+          app-name: aerotower-auth
+          publish-profile: ${{ secrets.AZURE_AUTH_API_PUBLISH_PROFILE }}
+          package: api
+      - name: Publica o worker (Servico B)
+        uses: azure/webapps-deploy@v3
+        with:
+          app-name: aerotower-auth-worker
+          publish-profile: ${{ secrets.AZURE_AUTH_WORKER_PUBLISH_PROFILE }}
+          package: worker

@@ -56,6 +56,19 @@ Testes: `cd api && pytest` e `cd worker && pytest`.
 
 Fábrica: `python scripts/provisionar_torre.py --kit pro --porta COM5` (ver o cabeçalho do script).
 
+## Na nuvem
+
+| Peça | Onde | Custo |
+|---|---|---|
+| API (Serviço A) | Web App `aerotower-auth`, **no mesmo plano B1 do Backend** | sem custo extra (cobrança é por plano) |
+| Worker (Serviço B) | Web App `aerotower-auth-worker`, mesmo plano, com Always On | idem |
+| RabbitMQ | CloudAMQP, plano gratuito *Little Lemur* (1 M mensagens/mês) | grátis |
+| Postgres | mesmo servidor do Backend, banco `auth` separado | já pago |
+
+O worker responde `GET /` com o próprio estado (a App Service exige uma
+porta HTTP respondendo). Deploy automático: `.github/workflows/azure.yml`
+(instruções no topo do arquivo).
+
 ## Variáveis
 
 | Variável | Serviço | Para quê |
