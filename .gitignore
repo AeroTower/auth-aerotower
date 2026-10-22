@@ -1,2 +1,9 @@
+# Ambiente local
 .env
 !.env.example
+venv/
+.venv/
+__pycache__/
+*.py[cod]
+*.db
+etiquetas/

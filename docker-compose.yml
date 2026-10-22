@@ -1,40 +1,63 @@
+# Sobe o servico de autenticacao completo na sua maquina:
+#   cp .env.example .env   (preencha)
+#   docker compose up --build
+# API: http://localhost:8000/docs   RabbitMQ: http://localhost:15672 (guest/guest)
+#
+# O Backend principal (repo aerotower-backend) roda a parte; o worker o
+# encontra em BACKEND_URL (padrao: o Backend rodando na sua maquina, porta 8001).
 services:
   rabbitmq:
     image: rabbitmq:3-management
     container_name: rabbitmq_broker
     ports:
       - "5672:5672"
-      - "15672:15672" # Painel web de gestão do RabbitMQ (porta acessível no browser para testes)
-    networks:
-      - rede-interna
+      - "15672:15672"
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      retries: 10
+    networks: [rede-interna]
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: auth_postgres
+    environment:
+      POSTGRES_USER: auth
+      POSTGRES_PASSWORD: auth
+      POSTGRES_DB: auth
+    volumes:
+      - auth-dados:/var/lib/postgresql/data
+    networks: [rede-interna]
 
   api:
     build: ./api
     container_name: servico_a_api
     ports:
       - "8000:8000"
-    command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
-    volumes:
-      - ./api:/app
+    env_file: .env
     environment:
-      - RABBITMQ_HOST=rabbitmq
-      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
+      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672/%2F
+      DATABASE_URL: postgresql://auth:auth@postgres:5432/auth
     depends_on:
-      - rabbitmq
-    networks:
-      - rede-interna
+      rabbitmq: { condition: service_healthy }
+      postgres: { condition: service_started }
+    networks: [rede-interna]
 
   worker:
     build: ./worker
     container_name: servico_b_worker
-    command: python consumer.py
+    env_file: .env
     environment:
-      - RABBITMQ_HOST=rabbitmq
-      - PYTHONUNBUFFERED=1
+      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672/%2F
+      BACKEND_URL: ${BACKEND_URL:-http://host.docker.internal:8001}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     depends_on:
-      - rabbitmq
-    networks:
-      - rede-interna
+      rabbitmq: { condition: service_healthy }
+    networks: [rede-interna]
+
+volumes:
+  auth-dados:
 
 networks:
   rede-interna:
