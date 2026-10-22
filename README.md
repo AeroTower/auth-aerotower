@@ -11,18 +11,6 @@ App Flutter ──HTTPS──▶ Serviço A (API)  ──evento torre.*──▶
      └──── mesmo token ─────────────────────────────▶ Backend (telemetria, bomba) ◀┘
 ```
 
-## Dois modos de entrega dos eventos
-
-| `EVENTOS_MODO` | Caminho | Precisa de |
-|---|---|---|
-| `direto` (padrão) | API → `PUT /internal/torres/{id}` no Backend, na hora | só a API |
-| `rabbitmq` | API → RabbitMQ → worker → Backend | RabbitMQ + worker |
-
-O modo `direto` existe enquanto o time decide o broker com o professor
-(RabbitMQ ou Azure Service Bus). Nos dois, se a entrega falhar o vínculo é
-desfeito e o app recebe 503. Para usar o Service Bus, basta acrescentar um
-modo em `api/eventos.py` e um consumidor no worker; o resto não muda.
-
 ## Serviço A — API (`api/`)
 
 | Rota | Quem chama | O que faz |
@@ -88,14 +76,13 @@ porta HTTP respondendo). Deploy automático: `.github/workflows/azure.yml`
 | `GOOGLE_CLIENT_IDS` | A | Client IDs aceitos (web, Android, iOS) |
 | `JWT_SEGREDO` | A | Assina o token. **Mesmo valor no Backend** |
 | `DATABASE_URL` | A | Postgres (SQLite local se vazio) |
-| `RABBITMQ_URL` | A e B, só no modo rabbitmq | `amqp://usuario:senha@host:5672/vhost` |
+| `RABBITMQ_URL` | A e B | `amqp://usuario:senha@host:5672/vhost` |
 | `ADMIN_API_KEY` | A | Script de fábrica |
 | `MAX_TORRES_POR_USUARIO` | A | Regra de negócio (padrão 1) |
 | `AUTH_MODO_DEV` | A | Libera `/auth/dev`. Nunca em produção |
 | `CORS_ORIGENS` | A | Domínios do app e da loja |
-| `EVENTOS_MODO` | A | `direto` ou `rabbitmq` |
-| `BACKEND_URL` | A (direto) e B | Endereço do Backend |
-| `SERVICO_API_KEY` | A (direto) e B | Chave da rota interna. **Mesmo valor no Backend** |
+| `BACKEND_URL` | B | Endereço do Backend |
+| `SERVICO_API_KEY` | B | Chave da rota interna. **Mesmo valor no Backend** |
 
 ## Correções em relação à versão anterior
 

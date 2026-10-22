@@ -23,17 +23,6 @@ JWT_VALIDADE_DIAS = int(os.getenv("JWT_VALIDADE_DIAS", "7"))
 _db = (os.getenv("DATABASE_URL") or "sqlite:///./auth.db").strip()
 DATABASE_URL = _db.replace("postgres://", "postgresql://", 1) if _db.startswith("postgres://") else _db
 
-# Como os eventos de torre chegam ao Backend:
-#   direto   -> a API chama PUT /internal/torres/{id} no Backend na hora (sem
-#               fila, sem worker). Mais simples; e o modo enquanto o time
-#               decide entre RabbitMQ e Azure Service Bus.
-#   rabbitmq -> publica no RabbitMQ e o worker (Servico B) entrega.
-EVENTOS_MODO = os.getenv("EVENTOS_MODO", "direto").strip().lower()
-
-# Usados no modo direto (no modo rabbitmq, so o worker precisa deles).
-BACKEND_URL     = os.getenv("BACKEND_URL", "http://localhost:8001").rstrip("/")
-SERVICO_API_KEY = os.getenv("SERVICO_API_KEY", "")
-
 # Aceita RABBITMQ_URL completo (CloudAMQP, Azure) ou so o host (docker-compose antigo).
 RABBITMQ_URL = os.getenv("RABBITMQ_URL") or f"amqp://guest:guest@{os.getenv('RABBITMQ_HOST', 'localhost')}:5672/%2F"
 EXCHANGE     = os.getenv("RABBITMQ_EXCHANGE", "aerotower.eventos")
