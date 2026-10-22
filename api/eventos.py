@@ -1,4 +1,12 @@
-"""Publica eventos no RabbitMQ (exchange topic `aerotower.eventos`).
+"""Entrega os eventos de torre ao resto do sistema.
+
+Dois modos (EVENTOS_MODO, ver config.py):
+* direto: chama o Backend por HTTP na hora. Sem fila: se o Backend nao
+  responder, o vinculo e desfeito e o app recebe 503.
+* rabbitmq: publica na exchange topic `aerotower.eventos`; o worker entrega.
+
+Trocar de broker (ex.: Azure Service Bus) = acrescentar um modo aqui e um
+consumidor no worker. O resto da API nao muda.
 
 Cada evento leva o ESTADO COMPLETO da torre, nao so "o que mudou". Assim o
 consumidor pode reprocessar a mesma mensagem sem estragar nada
@@ -12,8 +20,9 @@ import logging
 from datetime import datetime, timezone
 
 import pika
+import requests
 
-from config import EXCHANGE, RABBITMQ_URL
+from config import BACKEND_URL, EVENTOS_MODO, EXCHANGE, RABBITMQ_URL, SERVICO_API_KEY
 
 logger = logging.getLogger(__name__)
 
@@ -23,6 +32,31 @@ class FalhaAoPublicar(Exception):
 
 
 def publicar(tipo: str, torre: dict) -> None:
+    if EVENTOS_MODO == "rabbitmq":
+        _publicar_rabbitmq(tipo, torre)
+    else:
+        _entregar_direto(tipo, torre)
+
+
+def _entregar_direto(tipo: str, torre: dict) -> None:
+    """Mesmo PUT que o worker faria, so que sincrono."""
+    try:
+        resposta = requests.put(
+            f"{BACKEND_URL}/internal/torres/{torre['id']}",
+            json={k: torre.get(k) for k in ("kit", "donoId", "apelido", "versao")},
+            headers={"X-Service-Key": SERVICO_API_KEY},
+            timeout=60,   # App Service frio demora para acordar
+        )
+    except requests.RequestException as erro:
+        logger.error("Backend indisponível para %s: %s", tipo, erro)
+        raise FalhaAoPublicar(str(erro))
+    if resposta.status_code >= 400:
+        logger.error("Backend recusou %s (%s): %s", tipo, resposta.status_code, resposta.text[:200])
+        raise FalhaAoPublicar(f"Backend respondeu {resposta.status_code}")
+    logger.info("Evento %s entregue direto ao Backend: %s", tipo, torre)
+
+
+def _publicar_rabbitmq(tipo: str, torre: dict) -> None:
     corpo = json.dumps({
         "tipo": tipo,
         "torre": torre,

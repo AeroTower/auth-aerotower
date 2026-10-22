@@ -25,6 +25,7 @@ import sessao
 from banco import Base, Torre, Usuario, engine, get_db
 from config import (
     ADMIN_API_KEY,
+    EVENTOS_MODO,
     AUTH_MODO_DEV,
     CORS_ORIGENS,
     GOOGLE_CLIENT_IDS,
@@ -173,6 +174,7 @@ def home():
         "status": "online",
         "google_configurado": bool(GOOGLE_CLIENT_IDS),
         "max_torres_por_usuario": MAX_TORRES_POR_USUARIO,
+        "eventos": EVENTOS_MODO,
     }
 
 
@@ -324,5 +326,5 @@ def sincronizar(db: Session = Depends(get_db)):
         try:
             eventos.publicar("torre.sincronizada", torre.estado())
         except eventos.FalhaAoPublicar:
-            raise HTTPException(503, "RabbitMQ indisponível.")
+            raise HTTPException(503, "Não foi possível entregar os eventos agora.")
     return {"reenviadas": len(torres)}

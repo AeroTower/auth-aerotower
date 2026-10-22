@@ -123,3 +123,39 @@ def test_access_token_da_web_tambem_confere_o_app(cliente_e_eventos, monkeypatch
         return Resp(200, {"name": "Web"})
     monkeypatch.setattr(google_auth.requests, "get", falso_get)
     assert cliente.post("/auth/google", json={"token": "ya29.token-de-acesso"}).status_code == esperado
+
+
+def test_modo_direto_chama_o_backend(cliente_e_eventos, monkeypatch):
+    """Sem RabbitMQ: a API entrega o evento ao Backend por HTTP, na hora."""
+    import importlib
+    import eventos
+    cliente, _ = cliente_e_eventos
+    monkeypatch.undo()                       # volta o publicar de verdade
+    importlib.reload(eventos)
+    monkeypatch.setattr(eventos, "EVENTOS_MODO", "direto")
+    monkeypatch.setattr(eventos, "SERVICO_API_KEY", "chave-servico")
+    chamadas = []
+
+    class Resp:
+        status_code, text = 200, "{}"
+
+    def falso_put(url, json, headers, timeout):
+        chamadas.append((url, json, headers))
+        return Resp()
+    monkeypatch.setattr(eventos.requests, "put", falso_put)
+
+    torre_id = "AT-" + uuid.uuid4().hex[:12].upper()
+    r = cliente.post("/admin/torres", json={"torreId": torre_id, "kit": "completo"}, headers=ADMIN)
+    assert r.status_code == 201
+    url, corpo, headers = chamadas[-1]
+    assert url.endswith(f"/internal/torres/{torre_id}")
+    assert corpo == {"kit": "completo", "donoId": None, "apelido": None, "versao": 1}
+    assert headers == {"X-Service-Key": "chave-servico"}
+
+    # Backend fora do ar: nada é gravado e o app recebe 503
+    def cai(*a, **k):
+        raise eventos.requests.ConnectionError("recusado")
+    monkeypatch.setattr(eventos.requests, "put", cai)
+    h, _ = _login(cliente, "duda")
+    assert cliente.post("/torre/vincular", json={"codigo": r.json()["codigoAtivacao"]}, headers=h).status_code == 503
+    assert cliente.get("/auth/me", headers=h).json()["torres"] == []

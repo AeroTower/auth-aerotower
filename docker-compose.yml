@@ -36,6 +36,7 @@ services:
       - "8000:8000"
     env_file: .env
     environment:
+      EVENTOS_MODO: rabbitmq
       RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672/%2F
       DATABASE_URL: postgresql://auth:auth@postgres:5432/auth
     depends_on:

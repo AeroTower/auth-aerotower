@@ -42,6 +42,10 @@ jobs:
     needs: testes
     if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
+    env:
+      # Sem o secret do worker (modo EVENTOS_MODO=direto, sem fila), o passo
+      # do worker e pulado em vez de falhar.
+      TEM_WORKER: ${{ secrets.AZURE_AUTH_WORKER_PUBLISH_PROFILE != '' }}
     steps:
       - uses: actions/checkout@v4
       - name: Publica a API (Servico A)
@@ -51,6 +55,7 @@ jobs:
           publish-profile: ${{ secrets.AZURE_AUTH_API_PUBLISH_PROFILE }}
           package: api
       - name: Publica o worker (Servico B)
+        if: env.TEM_WORKER == 'true'
         uses: azure/webapps-deploy@v3
         with:
           app-name: aerotower-auth-worker
