@@ -329,6 +329,8 @@ def sincronizar(db: Session = Depends(get_db)):
     for torre in torres:
         try:
             eventos.publicar("torre.sincronizada", torre.estado())
-        except eventos.FalhaAoPublicar:
-            raise HTTPException(503, "RabbitMQ indisponível.")
+        except eventos.FalhaAoPublicar as erro:
+            # "unroutable" = nenhuma fila ligada: o worker nunca conectou
+            # neste broker (confira RABBITMQ_URL no worker e na API).
+            raise HTTPException(503, f"Evento não publicado no RabbitMQ: {erro}")
     return {"reenviadas": len(torres)}

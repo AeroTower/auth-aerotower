@@ -40,7 +40,9 @@ ESPERA_S     = float(os.getenv("WORKER_ESPERA_S", "5"))
 
 
 # Estado para a pagina de saude (App Service exige uma porta HTTP respondendo).
-_saude = {"conectado": False, "processados": 0, "ultimo_erro": None}
+_saude = {"conectado": False, "processados": 0, "ultimo_sucesso": None,
+          "ultimo_erro": None, "ultimo_erro_em": None,
+          "backend": BACKEND_URL}   # endereco (sem a chave): ajuda a achar Backend errado
 
 
 class _Saude(BaseHTTPRequestHandler):
@@ -85,7 +87,12 @@ def aplicar_no_backend(evento: dict) -> None:
     try:
         resposta = requests.put(
             f"{BACKEND_URL}/internal/torres/{torre_id}",
-            json={k: torre.get(k) for k in ("kit", "donoId", "apelido", "versao")},
+            json={
+                **{k: torre.get(k) for k in ("kit", "donoId", "apelido", "versao")},
+                # Reenvio do admin: o auth e a fonte da verdade, o Backend
+                # aplica mesmo se guardou uma versao maior (banco recriado).
+                "forcar": evento.get("tipo") == "torre.sincronizada",
+            },
             headers={"X-Service-Key": SERVICO_KEY},
             timeout=60,   # App Service frio demora para acordar
         )
@@ -106,13 +113,17 @@ def processar(canal, metodo, propriedades, corpo):
         aplicar_no_backend(evento)
         canal.basic_ack(delivery_tag=metodo.delivery_tag)
         _saude["processados"] += 1
+        _saude["ultimo_sucesso"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
         log.info("Backend atualizado (%s)", evento["torre"]["id"])
     except ErroTemporario as erro:
         _saude["ultimo_erro"] = str(erro)[:200]
+        _saude["ultimo_erro_em"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
         log.warning("Backend indisponível (%s). Nova tentativa em %ss.", erro, ESPERA_S)
         time.sleep(ESPERA_S)
         canal.basic_nack(delivery_tag=metodo.delivery_tag, requeue=True)
     except (ErroPermanente, ValueError, KeyError) as erro:
+        _saude["ultimo_erro"] = f"descartado: {erro}"[:200]
+        _saude["ultimo_erro_em"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
         log.error("Evento descartado para %s: %s", FILA_FALHAS, erro)
         canal.basic_nack(delivery_tag=metodo.delivery_tag, requeue=False)  # dead-letter
 

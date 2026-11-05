@@ -6,6 +6,11 @@ consumidor pode reprocessar a mesma mensagem sem estragar nada
 
 Routing keys: torre.cadastrada, torre.vinculada, torre.desvinculada,
 torre.sincronizada (reenvio manual pelo admin).
+
+`mandatory=True`: se nenhuma fila estiver ligada a exchange (worker nunca
+conectou neste broker, fila apagada, RABBITMQ_URL diferente entre API e
+worker), o broker devolve a mensagem e a publicacao FALHA, em vez de o
+evento sumir em silencio com a API respondendo sucesso.
 """
 import json
 import logging
@@ -39,7 +44,7 @@ def publicar(tipo: str, torre: dict) -> None:
             canal.basic_publish(
                 exchange=EXCHANGE, routing_key=tipo, body=corpo,
                 properties=pika.BasicProperties(delivery_mode=2, content_type="application/json"),
-                mandatory=False,
+                mandatory=True,
             )
     except Exception as erro:
         # Antes o erro era so impresso e a API respondia "sucesso" mesmo
