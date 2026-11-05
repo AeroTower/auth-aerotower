@@ -87,7 +87,12 @@ def aplicar_no_backend(evento: dict) -> None:
     try:
         resposta = requests.put(
             f"{BACKEND_URL}/internal/torres/{torre_id}",
-            json={k: torre.get(k) for k in ("kit", "donoId", "apelido", "versao")},
+            json={
+                **{k: torre.get(k) for k in ("kit", "donoId", "apelido", "versao")},
+                # Reenvio do admin: o auth e a fonte da verdade, o Backend
+                # aplica mesmo se guardou uma versao maior (banco recriado).
+                "forcar": evento.get("tipo") == "torre.sincronizada",
+            },
             headers={"X-Service-Key": SERVICO_KEY},
             timeout=60,   # App Service frio demora para acordar
         )

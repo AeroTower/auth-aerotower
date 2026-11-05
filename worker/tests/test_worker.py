@@ -54,3 +54,17 @@ def test_backend_parado_ou_chave_errada_espera(monkeypatch):
         canal = _rodar(monkeypatch, lambda *a, s=status, **k: SimpleNamespace(
             status_code=s, text="Error 403 - This web app is stopped."))
         assert canal.nacks == [(7, True)], status
+
+
+def test_so_o_reenvio_do_admin_forca(monkeypatch):
+    enviados = []
+
+    def put(url, json, **k):
+        enviados.append(json)
+        return SimpleNamespace(status_code=200, text="")
+
+    monkeypatch.setattr(consumer.requests, "put", put)
+    torre = {"id": "AT-SIMULADA01", "kit": "pro", "donoId": None, "apelido": None, "versao": 3}
+    consumer.aplicar_no_backend({"tipo": "torre.desvinculada", "torre": torre})
+    consumer.aplicar_no_backend({"tipo": "torre.sincronizada", "torre": torre})
+    assert [e["forcar"] for e in enviados] == [False, True]
