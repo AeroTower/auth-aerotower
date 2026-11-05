@@ -6,8 +6,11 @@ PUT /internal/torres/{id}.
 
 Garantias:
 * ack manual: a mensagem so sai da fila depois que o Backend confirmou;
-* Backend fora do ar (rede, 5xx): espera e devolve a mensagem para a fila;
-* evento com dado ruim (4xx): vai para a fila de falhas
+* Backend fora do ar (rede, 5xx), parado na Azure (403 "web app is
+  stopped"), sem a rota (404) ou com chave errada (401/403): espera e
+  devolve a mensagem para a fila. Nada se perde; volta sozinho quando o
+  Backend (ou a configuracao) voltar;
+* so evento com dado ruim (400/422) vai para a fila de falhas
   `backend.torres.falhas`, para alguem olhar, em vez de travar a fila;
 * eventos levam o estado completo + versao, entao reprocessar e seguro.
 
@@ -70,6 +73,10 @@ class ErroPermanente(Exception):
     """Tentar de novo nao adianta (evento malformado, chave errada)."""
 
 
+# So o conteudo do evento estar errado justifica desistir dele.
+RECUSA_DEFINITIVA = {400, 422}
+
+
 def aplicar_no_backend(evento: dict) -> None:
     torre = evento.get("torre") or {}
     torre_id = torre.get("id")
@@ -84,10 +91,12 @@ def aplicar_no_backend(evento: dict) -> None:
         )
     except requests.RequestException as erro:
         raise ErroTemporario(str(erro))
-    if resposta.status_code >= 500 or resposta.status_code == 429:
-        raise ErroTemporario(f"Backend respondeu {resposta.status_code}")
-    if resposta.status_code >= 400:
+    if resposta.status_code in RECUSA_DEFINITIVA:
         raise ErroPermanente(f"Backend respondeu {resposta.status_code}: {resposta.text[:200]}")
+    if resposta.status_code >= 400:
+        # 403 tambem e o que a Azure responde com o app parado: descartar
+        # aqui ja fez a torre "voltar" para quem a tinha removido.
+        raise ErroTemporario(f"Backend respondeu {resposta.status_code}: {resposta.text[:120]}")
 
 
 def processar(canal, metodo, propriedades, corpo):

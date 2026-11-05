@@ -46,3 +46,11 @@ def test_backend_fora_devolve_para_a_fila(monkeypatch):
 def test_evento_recusado_vai_para_falhas(monkeypatch):
     canal = _rodar(monkeypatch, lambda *a, **k: SimpleNamespace(status_code=422, text="kit"))
     assert canal.nacks == [(7, False)]
+
+
+def test_backend_parado_ou_chave_errada_espera(monkeypatch):
+    """403 da Azure (app parado), 401 e 404: tenta de novo, não descarta."""
+    for status in (401, 403, 404):
+        canal = _rodar(monkeypatch, lambda *a, s=status, **k: SimpleNamespace(
+            status_code=s, text="Error 403 - This web app is stopped."))
+        assert canal.nacks == [(7, True)], status
