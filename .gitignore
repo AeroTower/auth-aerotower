@@ -7,3 +7,11 @@ __pycache__/
 *.py[cod]
 *.db
 etiquetas/
+
+# Testes
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+relatorio-testes.xml
+.pytest_cache/

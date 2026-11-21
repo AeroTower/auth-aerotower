@@ -3,7 +3,7 @@ import sys
 from pathlib import Path
     
 # Adiciona a pasta scripts ao path temporariamente
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from provisionar_torre import rede_portal, PADRAO_ID
 
 def test_rede_portal_extrai_ultimos_quatro_digitos():
