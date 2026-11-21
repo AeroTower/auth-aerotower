@@ -15,7 +15,7 @@ import provisionar_torre as fab
 
 class SerialFalsa:
     def __init__(self, linhas):
-        self._linhas = [l.encode() for l in linhas]
+        self._linhas = [linha.encode() for linha in linhas]
         self.dtr = self.rts = None
 
     def __call__(self, porta, baud, timeout):

@@ -1,0 +1,25 @@
+# Analise estatica (ruff = flake8 + pyflakes + mccabe, num binario so).
+# Rodar: ruff check .
+line-length = 120
+target-version = "py311"
+extend-exclude = ["__pycache__"]
+
+[lint]
+# E/W estilo PEP 8, F erros reais (import sem uso, nome indefinido),
+# B bugbear (armadilhas comuns), SIM simplificacoes, C90 complexidade.
+select = ["E", "F", "W", "B", "SIM", "C90"]
+
+[lint.mccabe]
+max-complexity = 10
+
+[lint.flake8-bugbear]
+# Depends(...) no valor padrao e o jeito normal de usar o FastAPI.
+extend-immutable-calls = [
+    "fastapi.Depends", "fastapi.Header", "fastapi.Path", "fastapi.Query",
+    "fastapi.Body", "fastapi.Form", "fastapi.File", "fastapi.Security",
+]
+
+[lint.per-file-ignores]
+# Testes: nomes de funcao longos e asserts em sequencia sao normais.
+"**/tests/**" = ["E501"]
+"conftest.py" = ["E501"]

@@ -59,9 +59,9 @@ def test_fabrica_cadastra_gera_adesivo_e_troca_codigo(api_no_ar, monkeypatch, tm
 
     linhas = (tmp_path / "etiquetas" / "torres.csv").read_text(encoding="utf-8").splitlines()
     assert linhas[0] == "torre_id,kit,data,acao"
-    assert [l.split(",")[3] for l in linhas[1:]] == ["cadastro", "novo-codigo"]
+    assert [linha.split(",")[3] for linha in linhas[1:]] == ["cadastro", "novo-codigo"]
     # o codigo em texto nunca vai para o CSV (so existe no adesivo)
-    assert all(len(l.split(",")) == 4 for l in linhas)
+    assert all(len(linha.split(",")) == 4 for linha in linhas)
 
 
 def test_fabrica_com_chave_errada_para_com_mensagem(api_no_ar, monkeypatch):

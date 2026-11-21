@@ -25,6 +25,26 @@ App Flutter ──HTTPS──▶ Serviço A (API)  ──evento torre.*──▶
 | `GET /admin/torres` | fábrica | Lista tudo |
 | `POST /admin/sincronizar` | operação | Reenvia o estado de todas as torres (Backend com banco novo) |
 
+### Organização do código
+
+Cada arquivo tem uma responsabilidade só. As rotas não sabem de regra de
+negócio, e as regras não sabem de HTTP: elas levantam erros de `erros.py`,
+que um único handler transforma no status certo (400, 404, 409...).
+
+| Arquivo | Responsabilidade |
+|---|---|
+| `main.py` | Só monta o app: CORS, handler de erros e as rotas |
+| `rotas/` | Rotas HTTP por assunto: `saude`, `login`, `torres`, `admin` |
+| `schemas.py` | Formato dos pedidos (Pydantic) |
+| `dependencias.py` | Quem está logado (Bearer) e chave de admin |
+| `regras_torre.py` | Regras de vínculo e de fábrica + publicação dos eventos |
+| `contas.py` | Conta do usuário e resposta do login |
+| `erros.py` | Erros das regras → status HTTP |
+| `config.py`, `banco.py`, `sessao.py`, `eventos.py`, `google_auth.py`, `codigo.py` | Variáveis, banco, JWT, RabbitMQ, Google, código do adesivo |
+
+Análise estática: `ruff check .` (regras em `ruff.toml`, roda no CI antes
+dos testes).
+
 ### Regras de negócio
 
 - Um usuário **não pode** ter mais de `MAX_TORRES_POR_USUARIO` torres (hoje 1) → **400**.

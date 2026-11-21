@@ -3,7 +3,8 @@ import jwt
 import pytest
 
 import codigo
-import main
+import dependencias
+from rotas import login as rotas_login
 from apoio import ADMIN, login, nova_torre
 from banco import SessionLocal, Torre
 
@@ -57,13 +58,13 @@ def test_chave_de_admin_errada(cliente_e_eventos):
 
 def test_rotas_de_admin_desligadas_sem_chave_configurada(cliente_e_eventos, monkeypatch):
     cliente, _ = cliente_e_eventos
-    monkeypatch.setattr(main, "ADMIN_API_KEY", "")
+    monkeypatch.setattr(dependencias, "ADMIN_API_KEY", "")
     assert cliente.get("/admin/torres", headers=ADMIN).status_code == 403
 
 
 def test_login_sem_google_some_em_producao(cliente_e_eventos, monkeypatch):
     cliente, _ = cliente_e_eventos
-    monkeypatch.setattr(main, "AUTH_MODO_DEV", False)
+    monkeypatch.setattr(rotas_login, "AUTH_MODO_DEV", False)
     assert cliente.post("/auth/dev", json={"id": "ana"}).status_code == 404
 
 

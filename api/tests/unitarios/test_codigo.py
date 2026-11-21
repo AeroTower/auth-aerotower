@@ -1,4 +1,3 @@
-import pytest
 from codigo import gerar, normalizar, valido, hash_de, id_torre_valido, TAMANHO
 
 def test_gerar_retorna_formato_correto():

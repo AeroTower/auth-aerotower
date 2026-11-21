@@ -146,14 +146,14 @@ def gerar_etiqueta(torre_id: str, kit: str, codigo: str, pasta: Path, senha_wifi
     d.text((x1 + 275, 340), "Senha:", fill="#555555", font=mini)
     d.text((x1 + 275, 365), senha_wifi, fill="black", font=forte)
     linhas = [
-        f"Se a página não abrir sozinha,",
+        "Se a página não abrir sozinha,",
         f"acesse {IP_PORTAL} no navegador.",
         "Toque em Configure WiFi e escolha",
         "o Wi-Fi da casa (2,4 GHz).",
     ]
     for i, linha in enumerate(linhas):
         d.text((x1, 500 + i * 34), linha, fill="black", font=texto)
-    d.text((x1, 650), f"Trocou de roteador? Segure BOOT por 5 s.", fill="#555555", font=mini)
+    d.text((x1, 650), "Trocou de roteador? Segure BOOT por 5 s.", fill="#555555", font=mini)
 
     # Passo 2: app (o app ainda não lê QR, então o código vai grande)
     x2 = larg // 2 + 40

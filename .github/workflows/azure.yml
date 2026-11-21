@@ -30,6 +30,10 @@ jobs:
           cache: pip
       - name: Dependencias
         run: pip install -r api/requirements.txt -r worker/requirements.txt -r requirements-dev.txt
+      # Analise estatica (regras em ruff.toml): import sem uso, raise sem
+      # "from", complexidade > 10... Falha aqui tambem bloqueia o deploy.
+      - name: Analise estatica (ruff)
+        run: ruff check --output-format=github .
       # API, worker e script de fabrica juntos. Falha se algum teste falhar
       # ou se a cobertura ficar abaixo de 90% (.coveragerc): sem isso, nao
       # ha deploy.
