@@ -1,6 +1,6 @@
 """Testes de integracao: rotas da API + banco SQLite (RabbitMQ trocado por duble)."""
 import eventos as modulo_eventos
-import main
+import regras_torre
 from apoio import ADMIN, login, nova_torre
 
 
@@ -122,7 +122,7 @@ def test_dois_usuarios_no_mesmo_instante_so_um_vincula(cliente_e_eventos, monkey
     cliente, _ = cliente_e_eventos
     torre, codigo = nova_torre(cliente)
     h, _ = login(cliente)
-    original = main._torres_do_usuario
+    original = regras_torre.torres_do_usuario
 
     def outro_chega_antes(db, usuario_id):
         with SessionLocal() as s:
@@ -130,5 +130,5 @@ def test_dois_usuarios_no_mesmo_instante_so_um_vincula(cliente_e_eventos, monkey
             s.commit()
         return original(db, usuario_id)
 
-    monkeypatch.setattr(main, "_torres_do_usuario", outro_chega_antes)
+    monkeypatch.setattr(regras_torre, "torres_do_usuario", outro_chega_antes)
     assert cliente.post("/torre/vincular", json={"codigo": codigo}, headers=h).status_code == 409

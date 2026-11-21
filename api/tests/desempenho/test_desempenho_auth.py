@@ -32,7 +32,7 @@ def test_pico_de_ativacoes_no_dia_de_entrega(cliente_e_eventos):
 
     inicio = time.perf_counter()
     respostas = [cliente.post("/torre/vincular", json={"codigo": c}, headers=h)
-                 for (_, c), h in zip(lote, pessoas)]
+                 for (_, c), h in zip(lote, pessoas, strict=True)]
     duracao = time.perf_counter() - inicio
 
     assert {r.status_code for r in respostas} == {200}

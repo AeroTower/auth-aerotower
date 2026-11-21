@@ -51,7 +51,7 @@ def _verificar_id_token(token: str, client_ids: set) -> ContaGoogle:
     try:
         dados = id_token.verify_oauth2_token(token, google_requests.Request())
     except Exception as erro:
-        raise TokenGoogleInvalido(f"ID token recusado: {erro}")
+        raise TokenGoogleInvalido(f"ID token recusado: {erro}") from erro
     if dados.get("iss") not in _EMISSORES:
         raise TokenGoogleInvalido("Emissor não é o Google.")
     if dados.get("aud") not in client_ids:
@@ -65,7 +65,7 @@ def _verificar_access_token(token: str, client_ids: set) -> ContaGoogle:
     try:
         resposta = requests.get(_TOKENINFO, params={"access_token": token}, timeout=10)
     except requests.RequestException as erro:
-        raise TokenGoogleInvalido(f"Google indisponível: {erro}")
+        raise TokenGoogleInvalido(f"Google indisponível: {erro}") from erro
     if resposta.status_code != 200:
         raise TokenGoogleInvalido("Access token inválido ou expirado.")
     dados = resposta.json()

@@ -50,5 +50,5 @@ def publicar(tipo: str, torre: dict) -> None:
         # Antes o erro era so impresso e a API respondia "sucesso" mesmo
         # com o evento perdido. Agora quem chama desfaz a operacao.
         logger.error("Falha ao publicar %s: %s", tipo, erro)
-        raise FalhaAoPublicar(str(erro))
+        raise FalhaAoPublicar(str(erro)) from erro
     logger.info("Evento %s publicado: %s", tipo, torre)

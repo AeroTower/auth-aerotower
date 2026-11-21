@@ -97,7 +97,7 @@ def aplicar_no_backend(evento: dict) -> None:
             timeout=60,   # App Service frio demora para acordar
         )
     except requests.RequestException as erro:
-        raise ErroTemporario(str(erro))
+        raise ErroTemporario(str(erro)) from erro
     if resposta.status_code in RECUSA_DEFINITIVA:
         raise ErroPermanente(f"Backend respondeu {resposta.status_code}: {resposta.text[:200]}")
     if resposta.status_code >= 400:

@@ -40,8 +40,8 @@ def validar(token: str) -> str:
     try:
         dados = jwt.decode(token, _SEGREDO, algorithms=["HS256"], issuer=JWT_EMISSOR,
                            audience=JWT_AUDIENCIA, options={"require": ["sub", "exp"]})
-    except jwt.ExpiredSignatureError:
-        raise SessaoInvalida("Sessão expirada. Entre de novo.")
-    except jwt.PyJWTError:
-        raise SessaoInvalida("Sessão inválida. Entre de novo.")
+    except jwt.ExpiredSignatureError as erro:
+        raise SessaoInvalida("Sessão expirada. Entre de novo.") from erro
+    except jwt.PyJWTError as erro:
+        raise SessaoInvalida("Sessão inválida. Entre de novo.") from erro
     return dados["sub"]
