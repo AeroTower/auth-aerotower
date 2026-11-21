@@ -27,16 +27,28 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-      - name: Testes da API
-        working-directory: api
-        run: |
-          pip install -r requirements.txt pytest httpx
-          pytest -q tests
-      - name: Testes do worker
-        working-directory: worker
-        run: |
-          pip install -r requirements.txt pytest
-          pytest -q tests
+          cache: pip
+      - name: Dependencias
+        run: pip install -r api/requirements.txt -r worker/requirements.txt -r requirements-dev.txt
+      # API, worker e script de fabrica juntos. Falha se algum teste falhar
+      # ou se a cobertura ficar abaixo de 90% (.coveragerc): sem isso, nao
+      # ha deploy.
+      - name: Testes e cobertura
+        run: >
+          pytest --cov --cov-report=term-missing --cov-report=xml --cov-report=html
+          --junitxml=relatorio-testes.xml
+      - name: Resumo por tipo de teste
+        if: always()
+        run: python .github/resumo_testes.py relatorio-testes.xml coverage.xml >> "$GITHUB_STEP_SUMMARY"
+      - name: Evidencias (relatorio de cobertura e resultados)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: evidencias-testes-auth
+          path: |
+            htmlcov/
+            relatorio-testes.xml
+            coverage.xml
 
   deploy:
     needs: testes

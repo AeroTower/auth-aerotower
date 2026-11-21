@@ -1,0 +1,10 @@
+# Ferramentas de teste (nao vao para a Azure).
+# pip install -r api/requirements.txt -r worker/requirements.txt -r requirements-dev.txt
+pytest==9.2.0
+pytest-cov==7.1.0
+pytest-bdd==9.0.1
+httpx==0.28.1
+# usados pelo script de fabrica (etiqueta e porta USB)
+qrcode==8.2
+pillow==11.0.0
+pyserial==3.5

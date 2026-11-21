@@ -52,7 +52,7 @@ docker compose up --build   # rabbitmq + postgres + api + worker
 
 API em http://localhost:8000/docs, painel do RabbitMQ em http://localhost:15672 (guest/guest).
 
-Testes: `cd api && pytest` e `cd worker && pytest`.
+Testes: `pytest --cov` na raiz (API, worker e script de fábrica). Detalhes em [TESTES.md](TESTES.md).
 
 Fábrica: `python scripts/provisionar_torre.py --kit pro --porta COM5` (ver o cabeçalho do script).
 

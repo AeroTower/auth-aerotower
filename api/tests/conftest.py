@@ -12,7 +12,8 @@ os.environ.update({
     "GOOGLE_CLIENT_IDS": "nosso-app.apps.googleusercontent.com",
     "MAX_TORRES_POR_USUARIO": "1",
 })
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))   # api/: import main, eventos...
+sys.path.insert(0, str(Path(__file__).resolve().parent))       # api/tests/: import apoio
 
 import pytest  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402

@@ -1,0 +1,13 @@
+# Cobertura dos tres programas do repositorio: API, worker e script de fabrica.
+[run]
+source =
+    api
+    worker
+    scripts
+omit =
+    */tests/*
+
+[report]
+show_missing = true
+skip_empty = true
+fail_under = 90
